@@ -80,9 +80,14 @@ const rows = computed(() => {
       // so the last prompt's time is the better signal for "stale".
       const activeAt = promptAt ?? lastAt ?? 0;
 
+      // While an agent shows a question or a permission prompt, cmux can still report it as
+      // "working" (the prompt runs inside its turn) but marks the workspace "needs-attention".
+      // That lane belongs to the workspace, so it goes to the most recent agent in it.
+      const asking = a.status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && a.status !== "idle");
+
       let lane = "move";
       let reason = "";
-      if (a.status === "needs_input") {
+      if (asking) {
         lane = "needs";
         reason = "Waiting for your answer or approval";
       } else if (a.status === "working") {
@@ -113,6 +118,7 @@ const rows = computed(() => {
         title: w.title || a.title || "untitled",
         here: Boolean(w.selected),
         status: a.status,
+        asking,
         since: num(a.sinceEpoch),
         lastAt,
         activeAt,
@@ -126,7 +132,7 @@ const rows = computed(() => {
 
 const by = (lane, sort) => computed(() => rows().filter((r) => r.lane === lane).sort(sort));
 const needs = by("needs", (x, y) =>
-  (x.status === "needs_input" ? 0 : 1) - (y.status === "needs_input" ? 0 : 1)
+  (x.asking ? 0 : 1) - (y.asking ? 0 : 1)
   || (x.since ?? x.lastAt ?? 0) - (y.since ?? y.lastAt ?? 0));
 const working = by("working", (x, y) => x.order - y.order);
 const move = by("move", (x, y) => (y.lastAt ?? 0) - (x.lastAt ?? 0));
@@ -135,7 +141,10 @@ const stale = by("stale", (x, y) => (y.activeAt ?? 0) - (x.activeAt ?? 0));
 function timeLabel(r) {
   const t = now();
   if (r.lane === "working") return r.since ? clock(t - r.since) : "";
-  if (r.status === "needs_input") return r.since ? "waiting " + short(t - r.since) : "";
+  if (r.asking) {
+    const since = r.status === "needs_input" ? r.since ?? r.lastAt : r.lastAt;
+    return since ? "waiting " + short(t - since) : "";
+  }
   if (r.lane === "stale") return "idle " + short(t - r.activeAt);
   return r.lastAt ? short(t - r.lastAt) + " ago" : "";
 }
@@ -226,7 +235,7 @@ function tally(label, color, list, onTap) {
 function row(r, laneColor) {
   const strong = r().lane === "needs";
   return HStack({ spacing: 9 }, [
-    Circle({ size: 8 }).fill(() => (r().status === "needs_input" ? C.needs : laneColor)),
+    Circle({ size: 8 }).fill(() => (r().asking ? C.needs : laneColor)),
     VStack({ spacing: 2 }, [
       HStack({ spacing: 6 }, [
         Text(() => r().title)
@@ -237,7 +246,7 @@ function row(r, laneColor) {
         Spacer({ minLength: 4 }),
         Text(() => timeLabel(r()))
           .font(10).monospaced()
-          .color(() => (r().lane === "working" ? C.working : r().status === "needs_input" ? C.needs : "tertiary"))
+          .color(() => (r().lane === "working" ? C.working : r().asking ? C.needs : "tertiary"))
           .layoutPriority(2),
       ]),
       HStack({ spacing: 0 }, [
