@@ -46,3 +46,7 @@ Each row also shows the project folder, git branch (`•` when there are uncommi
 ## Customize
 
 Edit `~/.config/cmux/sidebars/switchboard.js` and save; cmux reloads it right away. Colors and the dashboard URL are at the top of the file.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
