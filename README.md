@@ -37,6 +37,7 @@ Each row also shows the project folder, git branch (`•` when there are uncommi
 - It reads cmux's own list of agent sessions, so it should show any agent cmux tracks. It has only been tested with Claude Code.
 - It reads cmux's local data only and sends nothing anywhere.
 - cmux sidebars can't read files or the network, so the panel can't show what an agent replied, and you can't approve or reply from it. Tap through to the terminal for that.
+- cmux sometimes never hears that an agent finished its turn, and keeps reporting it as working until your next prompt. A working agent triggers a hook at every tool call, so when an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel puts it under **Your move** and says "Probably finished". A single command that runs longer than 10 minutes, such as a long build, is read the same way until it ends.
 - The activity strip starts filling when cmux loads the panel. The "Stale after" choice goes back to 2 days when cmux reloads it.
 
 ## Optional: the full web dashboard

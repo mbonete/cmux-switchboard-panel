@@ -31,6 +31,16 @@ const [showStale, setShowStale] = signal(false);
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const now = () => num(data.clock()?.epoch) ?? 0;
 
+// cmux sometimes never hears that an agent finished (the end-of-turn event doesn't arrive), and then
+// reports it as working until the next prompt. A working agent fires a hook at every tool call, so
+// one that has done nothing for this long, with no subagent running, is treated as finished.
+const QUIET_SECS = 10 * 60;
+function isQuiet(a, t) {
+  const last = num(a.lastActivityAt);
+  return a.status === "working" && t > 0 && last !== null && t - last > QUIET_SECS
+    && !(a.children ?? []).some((c) => c.running);
+}
+
 // Prompts injected by tools (agent messages, task notices) start with "<"; they are not yours.
 function human(text) {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -83,14 +93,16 @@ const rows = computed(() => {
       // While an agent shows a question or a permission prompt, cmux can still report it as
       // "working" (the prompt runs inside its turn) but marks the workspace "needs-attention".
       // That lane belongs to the workspace, so it goes to the most recent agent in it.
-      const asking = a.status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && a.status !== "idle");
+      const quiet = isQuiet(a, t);
+      const status = quiet ? "idle" : a.status;
+      const asking = status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && status !== "idle");
 
       let lane = "move";
       let reason = "";
       if (asking) {
         lane = "needs";
         reason = "Waiting for your answer or approval";
-      } else if (a.status === "working") {
+      } else if (status === "working") {
         lane = "working";
       } else if (t > 0 && t - activeAt > staleSecs()) {
         lane = "stale";
@@ -117,8 +129,9 @@ const rows = computed(() => {
         order: num(w.index) ?? 999,
         title: w.title || a.title || "untitled",
         here: Boolean(w.selected),
-        status: a.status,
+        status,
         asking,
+        quiet,
         since: num(a.sinceEpoch),
         lastAt,
         activeAt,
@@ -151,6 +164,7 @@ function timeLabel(r) {
 
 function subtitle(r) {
   if (r.reason) return r.reason;
+  if (r.quiet) return "Probably finished: no activity for " + short(now() - r.lastAt) + ", though cmux still says working";
   if (r.prompt) return (r.lane === "working" ? "Working on: " : "You: ") + r.prompt;
   return r.lane === "working" ? "Working" : "";
 }
@@ -167,7 +181,7 @@ let backfilled = false;
 const strip = computed(() => {
   const t = now();
   const b = Math.floor(t / BUCKET);
-  const workingAgents = (data.workspaces() ?? []).flatMap((w) => w.agents ?? []).filter((a) => a.status === "working");
+  const workingAgents = (data.workspaces() ?? []).flatMap((w) => w.agents ?? []).filter((a) => a.status === "working" && !isQuiet(a, t));
   if (!backfilled && t > 0 && (data.workspaces() ?? []).length > 0) {
     backfilled = true;
     for (const a of workingAgents) {
