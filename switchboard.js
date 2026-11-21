@@ -78,6 +78,9 @@ function clock(secs) {
 // ---------------------------------------------------------------------------
 // One row per live agent session.
 
+// Per agent: its last activity when the workspace's needs-attention flag was last trusted (see rows).
+const flaggedAt = new Map();
+
 const rows = computed(() => {
   const t = now();
   const out = [];
@@ -96,8 +99,14 @@ const rows = computed(() => {
 
       // While an agent shows a question or a permission prompt, cmux can still report it as
       // "working" (the prompt runs inside its turn) but marks the workspace "needs-attention".
-      // That lane belongs to the workspace, so it goes to the most recent agent in it.
-      const asking = a.status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && a.status !== "idle");
+      // That lane belongs to the workspace, so it goes to the most recent agent in it. cmux sometimes
+      // keeps the flag after you answer. A question blocks the agent, so it is still asking only if
+      // it has done nothing since it stopped showing as needs-input (or since the flag appeared).
+      const key = w.id + ":" + a.id;
+      const flag = w.status === "needs-attention" && a === agents[0] && a.status !== "idle";
+      if (!flag) flaggedAt.delete(key);
+      else if (a.status === "needs_input" || !flaggedAt.has(key)) flaggedAt.set(key, lastAt);
+      const asking = a.status === "needs_input" || (flag && (lastAt ?? 0) <= (flaggedAt.get(key) ?? 0));
 
       // cmux keeps an agent "working" while background work it started is still running, even after
       // its turn ended. When that work dates from an earlier turn (a dev server, say), cmux itself
@@ -119,10 +128,9 @@ const rows = computed(() => {
         lane = "working";
       } else if (t > 0 && t - activeAt > staleSecs()) {
         lane = "stale";
-      } else if (w.status === "needs-attention") {
-        lane = "needs";
-        reason = "Needs your attention";
       }
+      // An idle agent isn't showing you a question: a needs-attention flag on its workspace is left
+      // over from one you already answered, so it doesn't move the row.
       // A finished agent with a reply you haven't read stays under Your move: it isn't stuck on
       // you. It is listed first there and marked unread.
 
@@ -136,7 +144,7 @@ const rows = computed(() => {
       if (w.pr && num(w.pr.number) !== null) meta.push("PR #" + w.pr.number);
 
       out.push({
-        key: w.id + ":" + a.id,
+        key,
         lane,
         reason,
         wsId: w.id,
