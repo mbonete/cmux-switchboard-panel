@@ -51,8 +51,30 @@ Each row also shows the project folder, git branch (`•` when there are uncommi
 - It reads cmux's own list of agent sessions, so it should show any agent cmux tracks. It has only been tested with Claude Code.
 - It reads cmux's local data only and sends nothing anywhere.
 - cmux sidebars can't read files or the network, so the panel can't show what an agent replied, and you can't approve or reply from it. Tap through to the terminal for that.
-- A working agent triggers a hook at every tool call. When an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel keeps it under **Working** and notes how long it has been quiet. Either it is waiting on something in the background, such as a long build, or it finished and cmux never heard about it. That happens now and then, and cmux then reports the agent as working until your next prompt. The panel can't tell the two apart, with one exception. If the background work started before your last prompt, as a dev server from an earlier turn does, the agent goes under **Your move** after 2 quiet minutes, the same way cmux's own sidebar shows it as waiting. In that case a single command longer than 2 minutes shows it under **Your move** until the command ends.
+- A working agent triggers a hook at every tool call. When an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel keeps it under **Working** and notes how long it has been quiet. Either it is waiting on something in the background, such as a long build, or it finished and cmux never heard about it. That happens now and then, and cmux then reports the agent as working until your next prompt (the optional Stop hook below fixes that). The panel can't tell the two apart, with one exception. If the background work started before your last prompt, as a dev server from an earlier turn does, the agent goes under **Your move** after 2 quiet minutes, the same way cmux's own sidebar shows it as waiting. In that case a single command longer than 2 minutes shows it under **Your move** until the command ends.
 - The activity strip starts filling when cmux loads the panel. The "Stale after" choice goes back to 2 days when cmux reloads it.
+
+## Optional: the Stop hook
+
+cmux now and then misses the end of a turn and keeps showing the agent as working until your next prompt, in its own sidebar and in this panel. A small Claude Code hook fixes that. It runs each time Claude finishes a turn, checks that cmux recorded it, and sends it again if not.
+
+```bash
+mkdir -p ~/.claude/hooks && \
+curl -fsSL https://raw.githubusercontent.com/mbonete/cmux-switchboard-panel/main/stop-hook.sh \
+  -o ~/.claude/hooks/switchboard-stop.sh
+```
+
+Then add it as a Stop hook in `~/.claude/settings.json`, next to any hooks you already have:
+
+```json
+"hooks": {
+  "Stop": [
+    { "hooks": [{ "type": "command", "command": "sh $HOME/.claude/hooks/switchboard-stop.sh", "timeout": 10 }] }
+  ]
+}
+```
+
+It needs `jq`, which macOS 15 and later include, and does nothing outside cmux. Normally it adds a few hundredths of a second to the end of a turn, and about 2 seconds when cmux is slow to record it. To check, it reads cmux's own session file, so a cmux update that changes that file turns the hook off until it's updated.
 
 ## Optional: the full web dashboard
 
