@@ -119,10 +119,12 @@ const rows = computed(() => {
         lane = "working";
       } else if (t > 0 && t - activeAt > staleSecs()) {
         lane = "stale";
-      } else if (unread || w.status === "needs-attention") {
+      } else if (w.status === "needs-attention") {
         lane = "needs";
-        reason = unread ? "New result you haven't read" : "Needs your attention";
+        reason = "Needs your attention";
       }
+      // A finished agent with a reply you haven't read stays under Your move: it isn't stuck on
+      // you. It is listed first there and marked unread.
 
       const meta = [];
       const dir = dirTail(a.directory || w.directory);
@@ -142,6 +144,7 @@ const rows = computed(() => {
         order: num(w.index) ?? 999,
         title: w.title || a.title || "untitled",
         here: Boolean(w.selected),
+        unread: lane === "move" && unread,
         status: a.status,
         asking,
         quiet: lane === "working" && quiet,
@@ -161,7 +164,7 @@ const needs = by("needs", (x, y) =>
   (x.asking ? 0 : 1) - (y.asking ? 0 : 1)
   || (x.since ?? x.lastAt ?? 0) - (y.since ?? y.lastAt ?? 0));
 const working = by("working", (x, y) => x.order - y.order);
-const move = by("move", (x, y) => (y.lastAt ?? 0) - (x.lastAt ?? 0));
+const move = by("move", (x, y) => (y.unread ? 1 : 0) - (x.unread ? 1 : 0) || (y.lastAt ?? 0) - (x.lastAt ?? 0));
 const stale = by("stale", (x, y) => (y.activeAt ?? 0) - (x.activeAt ?? 0));
 
 function timeLabel(r) {
@@ -268,6 +271,8 @@ function row(r, laneColor) {
         Text(() => r().title)
           .font(12.5).weight(strong ? "semibold" : "medium")
           .lineLimit(1).truncation("tail"),
+        Text(() => (r().unread ? "unread" : ""))
+          .font(9).weight("semibold").color(C.move).lineLimit(1).fixedSize("horizontal").layoutPriority(2),
         Text(() => (r().here ? "here" : ""))
           .font(9).color("tertiary").lineLimit(1).fixedSize("horizontal").layoutPriority(2),
         Spacer({ minLength: 4 }),

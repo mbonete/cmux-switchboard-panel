@@ -21,10 +21,24 @@ To update, run the same command again. To remove it, delete `~/.config/cmux/side
 
 | Section | What lands there |
 | --- | --- |
-| **Needs you** | An agent waiting for your answer or approval, or a finished result you haven't read yet. Longest wait first. |
+| **Needs you** | An agent that can't go on until you act: a permission request, a question or a plan to approve. Longest wait first. |
 | **Working** | Agents mid-turn, with a live timer, what you asked, and how many subagents are running. |
-| **Your move** | Agents that finished and are waiting for your next message. |
+| **Your move** | Agents that finished and are waiting for your next message. Replies you haven't read come first, marked unread. |
 | **Stale** | No activity for longer than the "Stale after" setting (1 day, 2 days or 1 week). Collapsed until you tap **Show**. |
+
+Where each situation goes:
+
+| Situation | Section |
+| --- | --- |
+| Claude shows a permission request, a multiple-choice question or a plan to approve | Needs you |
+| Claude is mid-turn, with or without subagents | Working |
+| Turn ended, but a job it started in that turn is still running (a build, a dev server) | Working, with a "Quiet for …" note after 10 minutes |
+| Turn ended, only background work from an earlier turn still running | Your move, after 2 quiet minutes |
+| Finished, reply unread | Your move, listed first |
+| Finished, reply read | Your move |
+| No activity for longer than "Stale after" | Stale |
+
+Questions Claude writes into its reply as plain text, like grill-me's rounds, count as a finished turn: the panel can't read replies.
 
 Each row also shows the project folder, git branch (`•` when there are uncommitted changes), dev-server ports, and the pull request when cmux knows one. The strip under the counters shows how many agents were working over the last 15 minutes.
 
