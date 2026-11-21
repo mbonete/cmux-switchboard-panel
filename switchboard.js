@@ -31,13 +31,17 @@ const [showStale, setShowStale] = signal(false);
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const now = () => num(data.clock()?.epoch) ?? 0;
 
-// cmux sometimes never hears that an agent finished (the end-of-turn event doesn't arrive), and then
-// reports it as working until the next prompt. A working agent fires a hook at every tool call, so
-// one that has done nothing for this long, with no subagent running, is treated as finished.
+// A working agent fires a hook at every tool call, so one that has done nothing for this long, with
+// no subagent running, gets a note under Working. Either it is waiting on something in the background
+// (a long build, a background shell: cmux rightly says working, but nothing fires while it waits), or
+// cmux never heard it finish and will report it as working until the next prompt. Unless the
+// background work is older than your last prompt (see rows below), the panel can't tell which, so it
+// keeps the row where cmux put it.
 const QUIET_SECS = 10 * 60;
-function isQuiet(a, t) {
+const FINISHED_SECS = 2 * 60;
+function isQuiet(a, t, secs = QUIET_SECS) {
   const last = num(a.lastActivityAt);
-  return a.status === "working" && t > 0 && last !== null && t - last > QUIET_SECS
+  return a.status === "working" && t > 0 && last !== null && t - last > secs
     && !(a.children ?? []).some((c) => c.running);
 }
 
@@ -93,16 +97,25 @@ const rows = computed(() => {
       // While an agent shows a question or a permission prompt, cmux can still report it as
       // "working" (the prompt runs inside its turn) but marks the workspace "needs-attention".
       // That lane belongs to the workspace, so it goes to the most recent agent in it.
+      const asking = a.status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && a.status !== "idle");
+
+      // cmux keeps an agent "working" while background work it started is still running, even after
+      // its turn ended. When that work dates from an earlier turn (a dev server, say), cmux itself
+      // shows the agent as waiting: you prompted it while it was already "working", so its working
+      // state is older than your last prompt. Once such an agent has been quiet for a couple of
+      // minutes, it is waiting on you. A prompt injected by a tool hides when you last wrote, so then
+      // the row stays under Working.
+      const since = num(a.sinceEpoch);
       const quiet = isQuiet(a, t);
-      const status = quiet ? "idle" : a.status;
-      const asking = status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && status !== "idle");
+      const finished = isQuiet(a, t, FINISHED_SECS) && prompt !== "" && promptAt !== null
+        && since !== null && since < promptAt - 5;
 
       let lane = "move";
       let reason = "";
       if (asking) {
         lane = "needs";
         reason = "Waiting for your answer or approval";
-      } else if (status === "working") {
+      } else if (a.status === "working" && !finished) {
         lane = "working";
       } else if (t > 0 && t - activeAt > staleSecs()) {
         lane = "stale";
@@ -129,10 +142,10 @@ const rows = computed(() => {
         order: num(w.index) ?? 999,
         title: w.title || a.title || "untitled",
         here: Boolean(w.selected),
-        status,
+        status: a.status,
         asking,
-        quiet,
-        since: num(a.sinceEpoch),
+        quiet: lane === "working" && quiet,
+        since,
         lastAt,
         activeAt,
         prompt,
@@ -164,13 +177,13 @@ function timeLabel(r) {
 
 function subtitle(r) {
   if (r.reason) return r.reason;
-  if (r.quiet) return "Probably finished: no activity for " + short(now() - r.lastAt) + ", though cmux still says working";
+  if (r.quiet) return "Quiet for " + short(now() - r.lastAt) + ": running something in the background, or finished without cmux noticing";
   if (r.prompt) return (r.lane === "working" ? "Working on: " : "You: ") + r.prompt;
   return r.lane === "working" ? "Working" : "";
 }
 
 // ---------------------------------------------------------------------------
-// Activity strip: how many agents were working, last 15 minutes in 30 s buckets.
+// Activity strip: how many agents were under Working, last 15 minutes in 30 s buckets.
 // History lives in the panel, so it starts filling when cmux loads it.
 
 const BUCKET = 30;
@@ -181,11 +194,11 @@ let backfilled = false;
 const strip = computed(() => {
   const t = now();
   const b = Math.floor(t / BUCKET);
-  const workingAgents = (data.workspaces() ?? []).flatMap((w) => w.agents ?? []).filter((a) => a.status === "working" && !isQuiet(a, t));
+  const workingAgents = working();
   if (!backfilled && t > 0 && (data.workspaces() ?? []).length > 0) {
     backfilled = true;
     for (const a of workingAgents) {
-      const s = num(a.sinceEpoch);
+      const s = a.since;
       if (s === null) continue;
       for (let k = Math.max(b - KEEP + 1, Math.floor(s / BUCKET)); k < b; k += 1) busy.set(k, (busy.get(k) ?? 0) + 1);
     }
