@@ -41,23 +41,6 @@ function isQuiet(a, t) {
     && !(a.children ?? []).some((c) => c.running);
 }
 
-// Skills like grill-me ask their questions as plain text and end the turn, so cmux reports the
-// agent as idle, not as waiting on you. Their rounds mark each question with ❓, and a workspace's
-// latestMessage holds the start of its agent's last reply. cmux can later replace that text with
-// its own "waiting for your input" notice, so the panel remembers the question until the agent
-// works again or you send another prompt.
-const QUESTION = "❓";
-const questions = new Map();
-
-function questionText(msg) {
-  const s = String(msg ?? "");
-  const i = s.indexOf(QUESTION);
-  if (i < 0) return null;
-  // The question only, without the agent's recommended answer (➡️) that follows it.
-  return s.slice(i + QUESTION.length).split("➡")[0]
-    .replace(/^\uFE0F/, "").replace(/[*`]/g, "").replace(/\s+/g, " ").trim();
-}
-
 // Prompts injected by tools (agent messages, task notices) start with "<"; they are not yours.
 function human(text) {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -112,33 +95,17 @@ const rows = computed(() => {
       // That lane belongs to the workspace, so it goes to the most recent agent in it.
       const quiet = isQuiet(a, t);
       const status = quiet ? "idle" : a.status;
-      const prompting = status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && status !== "idle");
-
-      // A question asked in plain text. Like the lane above, latestMessage belongs to the
-      // workspace, so it goes to the most recent agent in it. Once answered (the agent works
-      // again, or a newer prompt arrives), the same text can't reopen it.
-      const key = w.id + ":" + a.id;
-      let q = questions.get(key);
-      if (q?.open && (a.status !== "idle" || q.promptAt !== promptAt)) q.open = false;
-      const text = a.status === "idle" && a === agents[0] ? questionText(w.latestMessage) : null;
-      if (text !== null && text !== q?.text) {
-        q = { text, at: lastAt ?? t, promptAt, open: true };
-        questions.set(key, q);
-      }
-      const question = q?.open ? q : null;
+      const asking = status === "needs_input" || (w.status === "needs-attention" && a === agents[0] && status !== "idle");
 
       let lane = "move";
       let reason = "";
-      if (prompting) {
+      if (asking) {
         lane = "needs";
         reason = "Waiting for your answer or approval";
       } else if (status === "working") {
         lane = "working";
       } else if (t > 0 && t - activeAt > staleSecs()) {
         lane = "stale";
-      } else if (question) {
-        lane = "needs";
-        reason = question.text ? "Asked you: " + question.text : "Asked you a question";
       } else if (unread || w.status === "needs-attention") {
         lane = "needs";
         reason = unread ? "New result you haven't read" : "Needs your attention";
@@ -154,7 +121,7 @@ const rows = computed(() => {
       if (w.pr && num(w.pr.number) !== null) meta.push("PR #" + w.pr.number);
 
       out.push({
-        key,
+        key: w.id + ":" + a.id,
         lane,
         reason,
         wsId: w.id,
@@ -163,8 +130,7 @@ const rows = computed(() => {
         title: w.title || a.title || "untitled",
         here: Boolean(w.selected),
         status,
-        asking: prompting || (lane === "needs" && question !== null),
-        askedAt: question?.at ?? null,
+        asking,
         quiet,
         since: num(a.sinceEpoch),
         lastAt,
@@ -189,7 +155,7 @@ function timeLabel(r) {
   const t = now();
   if (r.lane === "working") return r.since ? clock(t - r.since) : "";
   if (r.asking) {
-    const since = r.status === "needs_input" ? r.since ?? r.lastAt : r.askedAt ?? r.lastAt;
+    const since = r.status === "needs_input" ? r.since ?? r.lastAt : r.lastAt;
     return since ? "waiting " + short(t - since) : "";
   }
   if (r.lane === "stale") return "idle " + short(t - r.activeAt);
