@@ -21,7 +21,7 @@ To update, run the same command again. To remove it, delete `~/.config/cmux/side
 
 | Section | What lands there |
 | --- | --- |
-| **Needs you** | An agent waiting for your answer or approval, or a finished result you haven't read yet. Longest wait first. |
+| **Needs you** | An agent waiting for your answer or approval, including questions a skill like grill-me asks in its reply, or a finished result you haven't read yet. Longest wait first. |
 | **Working** | Agents mid-turn, with a live timer, what you asked, and how many subagents are running. |
 | **Your move** | Agents that finished and are waiting for your next message. |
 | **Stale** | No activity for longer than the "Stale after" setting (1 day, 2 days or 1 week). Collapsed until you tap **Show**. |
@@ -36,8 +36,9 @@ Each row also shows the project folder, git branch (`•` when there are uncommi
 - cmux with Custom Sidebars turned on. It is a beta feature, on by default, under **Settings → Custom Sidebars**. Built on cmux 0.65.2.
 - It reads cmux's own list of agent sessions, so it should show any agent cmux tracks. It has only been tested with Claude Code.
 - It reads cmux's local data only and sends nothing anywhere.
-- cmux sidebars can't read files or the network, so the panel can't show what an agent replied, and you can't approve or reply from it. Tap through to the terminal for that.
+- cmux sidebars can't read files or the network, so the panel can't show an agent's full reply, and you can't approve or reply from it. Tap through to the terminal for that.
 - cmux sometimes never hears that an agent finished its turn, and keeps reporting it as working until your next prompt. A working agent triggers a hook at every tool call, so when an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel puts it under **Your move** and says "Probably finished". A single command that runs longer than 10 minutes, such as a long build, is read the same way until it ends.
+- Skills like grill-me ask their questions in the reply itself, so cmux sees an agent that simply finished. The panel spots them by the ❓ that grill-me puts before each question, and shows the first one under **Needs you** until you answer. A question asked in plain prose, without the ❓, still lands under **Your move**. If cmux reloads the panel after a question has been waiting for about a minute, the panel can miss it, because by then cmux shows its own "waiting for your input" notice instead of the reply.
 - The activity strip starts filling when cmux loads the panel. The "Stale after" choice goes back to 2 days when cmux reloads it.
 
 ## Optional: the full web dashboard
