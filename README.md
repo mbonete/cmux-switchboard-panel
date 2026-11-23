@@ -33,7 +33,7 @@ Where each situation goes:
 | Claude shows a permission request, a multiple-choice question or a plan to approve | Needs you |
 | Claude is mid-turn, with or without subagents | Working |
 | Turn ended, but a job it started in that turn is still running (a build, a dev server) | Working, with a "Quiet for …" note after 10 minutes |
-| Turn ended, only background work from an earlier turn still running | Your move, after 2 quiet minutes |
+| Turn ended, only background work from an earlier turn still running | Your move, after 2 quiet minutes if the reply is unread, otherwise after 10 |
 | Finished, reply unread | Your move, listed first |
 | Finished, reply read | Your move |
 | No activity for longer than "Stale after" | Stale |
@@ -51,7 +51,7 @@ Each row also shows the project folder, git branch (`•` when there are uncommi
 - It reads cmux's own list of agent sessions, so it should show any agent cmux tracks. It has only been tested with Claude Code.
 - It reads cmux's local data only and sends nothing anywhere.
 - cmux sidebars can't read files or the network, so the panel can't show what an agent replied, and you can't approve or reply from it. Tap through to the terminal for that.
-- A working agent triggers a hook at every tool call. When an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel keeps it under **Working** and notes how long it has been quiet. Either it is waiting on something in the background, such as a long build, or it finished and cmux never heard about it. That happens now and then, and cmux then reports the agent as working until your next prompt (the optional Stop hook below fixes that). The panel can't tell the two apart, with one exception. If the background work started before your last prompt, as a dev server from an earlier turn does, the agent goes under **Your move** after 2 quiet minutes, the same way cmux's own sidebar shows it as waiting. In that case a single command longer than 2 minutes shows it under **Your move** until the command ends.
+- A working agent triggers a hook at every tool call. When an agent cmux calls working has done nothing for 10 minutes and has no subagent running, the panel keeps it under **Working** and notes how long it has been quiet. Either it is waiting on something in the background, such as a long build, or it finished and cmux never heard about it. That happens now and then, and cmux then reports the agent as working until your next prompt (the optional Stop hook below fixes that). The panel can't tell the two apart, with one exception. If the background work started before your last prompt, as a dev server from an earlier turn does, the agent goes under **Your move** once it has been quiet for 2 minutes with an unread reply, the same way cmux's own sidebar shows it as waiting. Without an unread reply, because you already read it or because the agent is still mid-turn on a long command, it waits 10 quiet minutes. So in such a session a single command longer than 10 minutes shows the agent under **Your move** until the command ends.
 - The activity strip starts filling when cmux loads the panel. The "Stale after" choice goes back to 2 days when cmux reloads it.
 
 ## Optional: the Stop hook

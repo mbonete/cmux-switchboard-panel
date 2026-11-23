@@ -111,13 +111,15 @@ const rows = computed(() => {
       // cmux keeps an agent "working" while background work it started is still running, even after
       // its turn ended. When that work dates from an earlier turn (a dev server, say), cmux itself
       // shows the agent as waiting: you prompted it while it was already "working", so its working
-      // state is older than your last prompt. Once such an agent has been quiet for a couple of
-      // minutes, it is waiting on you. A prompt injected by a tool hides when you last wrote, so then
-      // the row stays under Working.
+      // state is older than your last prompt. Such an agent goes quiet once it is waiting on you, but
+      // also while it is still mid-turn on a long command, since nothing fires while a command runs.
+      // The end of a turn leaves an unread reply, so with one, a couple of quiet minutes is enough;
+      // without one (or once you've read it), it takes the full quiet period. A prompt injected by a
+      // tool hides when you last wrote, so then the row stays under Working.
       const since = num(a.sinceEpoch);
       const quiet = isQuiet(a, t);
-      const finished = isQuiet(a, t, FINISHED_SECS) && prompt !== "" && promptAt !== null
-        && since !== null && since < promptAt - 5;
+      const finished = isQuiet(a, t, unread ? FINISHED_SECS : QUIET_SECS) && prompt !== ""
+        && promptAt !== null && since !== null && since < promptAt - 5;
 
       let lane = "move";
       let reason = "";
