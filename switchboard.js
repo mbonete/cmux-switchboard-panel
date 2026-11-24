@@ -45,6 +45,25 @@ function isQuiet(a, t, secs = QUIET_SECS) {
     && !(a.children ?? []).some((c) => c.running);
 }
 
+function isFallbackAgent(a) {
+  return String(a.id ?? "").startsWith("fallback-");
+}
+
+function agentSurface(a) {
+  return a.panelId ?? a.surfaceId ?? null;
+}
+
+function visibleAgents(w) {
+  const live = (w.agents ?? []).filter((a) => a.status !== "ended");
+  // A hook event without a session ID can make cmux attach a synthetic fallback agent to a
+  // terminal that already has its real agent. Keep fallbacks when they are the only record for
+  // that surface, but don't render the same terminal twice when the real identity is available.
+  const realSurfaces = new Set(
+    live.filter((a) => !isFallbackAgent(a)).map(agentSurface).filter(Boolean),
+  );
+  return live.filter((a) => !isFallbackAgent(a) || !realSurfaces.has(agentSurface(a)));
+}
+
 // Prompts injected by tools (agent messages, task notices) start with "<"; they are not yours.
 function human(text) {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -85,7 +104,7 @@ const rows = computed(() => {
   const t = now();
   const out = [];
   for (const w of data.workspaces() ?? []) {
-    const agents = (w.agents ?? []).filter((a) => a.status !== "ended");
+    const agents = visibleAgents(w);
     for (const a of agents) {
       const tab = (w.tabs ?? []).find((x) => x.id === a.panelId || x.surfaceId === a.panelId);
       const solo = agents.length === 1;
